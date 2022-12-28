@@ -9,26 +9,31 @@ from transformers import AutoTokenizer, T5ForConditionalGeneration, MT5ForCondit
 nltk.download('punkt')
 nltk.download("words")
 
+import torch
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
 class KeyPhraseTransformer:
     def __init__(self, model_type: str = "t5", model_name: str = "snrspeaks/KeyPhraseTransformer"):
         self.model_name = model_name
         if model_type == "t5":
-            self.model = T5ForConditionalGeneration.from_pretrained(self.model_name)
+            self.model = T5ForConditionalGeneration.from_pretrained(self.model_name).to(device)
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         if model_type == "mt5":
-            self.model = MT5ForConditionalGeneration.from_pretrained(self.model_name)
+            self.model = MT5ForConditionalGeneration.from_pretrained(self.model_name).to(device)
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)        
 
     def split_into_paragraphs(self, doc: str, max_tokens_per_para: int = 128):
         sentences = sent_tokenize(doc.strip())
         temp = ""
+        wc_temp = 0
         temp_list = []
         final_list = []
 
         for i, sentence in enumerate(sentences):
             sent = sentence
             temp = temp + " " + sent
-            wc_temp = len(self.tokenizer.tokenize(temp))
+            wc_sent = len(self.tokenizer.tokenize(sent))
+            wc_temp += wc_sent
 
             if wc_temp < max_tokens_per_para:
                 temp_list.append(sentence)
@@ -41,6 +46,7 @@ class KeyPhraseTransformer:
 
                 temp = sentence
                 temp_list = [sentence]
+                wc_temp = wc_sent
 
                 if i == len(sentences) - 1:
                     final_list.append(" ".join(temp_list))
@@ -72,7 +78,7 @@ class KeyPhraseTransformer:
     def predict(self, doc: str):
         input_ids = self.tokenizer.encode(
             doc, return_tensors="pt", add_special_tokens=True
-        )
+        ).to(device)
         generated_ids = self.model.generate(
             input_ids=input_ids,
             num_beams=2,
